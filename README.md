@@ -33,6 +33,8 @@ Generate professional advertising banners with multiple products using GenAI. A 
 - **High Resolution**: 2048x2048 output
 - **Multi-Format**: Support for 1:1, 9:16, and 16:9 aspect ratios
 - **Brand Intelligence**: Auto-generates brand names and campaign messages
+- **Sensitive Content Filtering**: Built-in content moderation with error handling and form validation
+- **Brand Compliance Checker**: AI-powered verification that generated images contain brand logo and name
 - **Web Interface**: Modern React frontend with real-time progress tracking
 - **REST API**: FastAPI backend for programmatic access
 - **CLI Tool**: Command-line interface for batch operations
