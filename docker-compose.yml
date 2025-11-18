@@ -1,0 +1,58 @@
+services:
+  # Backend API service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: easy-ads-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN}
+    env_file:
+      - .env
+    volumes:
+      # Mount outputs directory for persistent storage
+      - ./outputs:/app/outputs
+      # Mount assets for easy updates without rebuild
+      - ./assets:/app/assets:ro
+      # Mount examples for easy updates
+      - ./examples:/app/examples:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    networks:
+      - easy-ads-network
+
+  # Frontend service
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: easy-ads-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - easy-ads-network
+
+networks:
+  easy-ads-network:
+    driver: bridge
+
+volumes:
+  outputs:
+    driver: local

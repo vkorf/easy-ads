@@ -1,0 +1,40 @@
+# Backend Dockerfile for Easy Ads
+FROM python:3.9-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy pyproject.toml and README.md for dependencies
+COPY pyproject.toml README.md ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir .
+
+# Copy application code
+COPY pipeline/ ./pipeline/
+COPY backend/ ./backend/
+COPY main.py .
+
+# Copy assets and examples
+COPY assets/ ./assets/
+COPY examples/ ./examples/
+
+# Create outputs directory
+RUN mkdir -p outputs
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/', timeout=2)"
+
+# Run the FastAPI backend
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
