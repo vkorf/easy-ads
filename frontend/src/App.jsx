@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import CampaignForm from './components/CampaignForm'
 import ImageGallery from './components/ImageGallery'
+import Background3D from './components/Background3D'
 import './App.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -20,7 +21,7 @@ function App() {
       try {
         const response = await fetch(`${API_BASE_URL}/api/status/${jobId}`)
         if (!response.ok) throw new Error('Failed to fetch status')
-        
+
         const status = await response.json()
         setJobStatus(status)
 
@@ -96,6 +97,7 @@ function App() {
 
   return (
     <div className="app">
+      <Background3D />
       <header className="app-header">
         <h1 className="app-title">Easy Ads</h1>
         <p className="app-subtitle">AI-Powered Banner Generation</p>
@@ -114,8 +116,8 @@ function App() {
                 <div className="progress-info">
                   <p className="progress-step">{jobStatus.progress.step}</p>
                   <div className="progress-bar">
-                    <div 
-                      className="progress-fill" 
+                    <div
+                      className="progress-fill"
                       style={{ width: `${jobStatus.progress.progress}%` }}
                     ></div>
                   </div>
