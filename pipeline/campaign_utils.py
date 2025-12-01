@@ -8,11 +8,15 @@ These functions are shared between the CLI (main.py) and the FastAPI backend.
 import logging
 import json
 import re
+import os
 from typing import Tuple
 from pydantic import BaseModel, Field
-import replicate
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
+
+# Initialize OpenAI client
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_TOKEN"))
 
 
 class OptimizedPrompt(BaseModel):
@@ -59,24 +63,27 @@ SEEDREAM 4.0 BEST PRACTICES:
 
 MARKET LOCALIZATION EXPERTISE:
 You are fluent in all languages and deeply understand cultural preferences for every market:
-- Automatically translate ALL text elements (brand names if appropriate, campaign messages, slogans) to the target market's primary language
+- BRAND NAMES: ALWAYS keep in English (NEVER translate brand names)
+- CAMPAIGN MESSAGES/SLOGANS: Translate to the target market's primary language
 - Adapt visual styles, colors, and aesthetics to match cultural preferences
 - Consider cultural symbolism, color meanings, and design preferences
 - Adjust composition and imagery to resonate with local audiences
 
-LANGUAGE TRANSLATION RULES:
-- US/UK/Australia/Canada: English (DO NOT TRANSLATE - use original English campaign message)
-- Germany/Austria/Switzerland: German (TRANSLATE campaign message to German)
-- France: French (TRANSLATE campaign message to French)
-- Spain/Mexico/Latin America: Spanish (TRANSLATE campaign message to Spanish)
-- Japan: Japanese (TRANSLATE campaign message to Japanese)
-- China: Simplified Chinese (TRANSLATE campaign message to Simplified Chinese)
-- Korea: Korean (TRANSLATE campaign message to Korean)
-- Italy: Italian (TRANSLATE campaign message to Italian)
-- Brazil/Portugal: Portuguese (TRANSLATE campaign message to Portuguese)
-- Russia: Russian (TRANSLATE campaign message to Russian)
-- Middle East: Arabic (TRANSLATE campaign message to Arabic where appropriate)
-- Other markets: Use the primary language of that market (TRANSLATE campaign message)
+LANGUAGE TRANSLATION RULES FOR CAMPAIGN MESSAGES ONLY:
+- US/UK/Australia/Canada: English (keep original English campaign message)
+- Germany/Austria/Switzerland: German (translate campaign message to German)
+- France: French (translate campaign message to French)
+- Spain/Mexico/Latin America: Spanish (translate campaign message to Spanish)
+- Japan: Japanese (translate campaign message to Japanese)
+- China: Simplified Chinese (translate campaign message to Simplified Chinese)
+- Korea: Korean (translate campaign message to Korean)
+- Italy: Italian (translate campaign message to Italian)
+- Brazil/Portugal: Portuguese (translate campaign message to Portuguese)
+- Russia: Russian (translate campaign message to Russian)
+- Middle East: Arabic (translate campaign message to Arabic where appropriate)
+- Other markets: Use the primary language of that market (translate campaign message)
+
+CRITICAL: Brand names must ALWAYS remain in English regardless of target market!
 
 CULTURAL ADAPTATION EXAMPLES:
 - Japan: Minimalist, zen aesthetics, soft colors, cherry blossoms, respect for negative space
@@ -91,24 +98,27 @@ Transform campaign briefs into detailed, optimized, and culturally adapted image
 
 CRITICAL REQUIREMENTS:
 1. Write in natural, coherent language (subject + action + environment)
-2. ALL text elements MUST be in double quotes with appropriate language:
-   - Campaign message: Keep in English for US/UK/Australia/Canada, TRANSLATE for other markets
-     Examples: "Run Further" (US) → keep as "Run Further", (Germany) → "Laufe Weiter", (Japan) → "走り続ける"
-   - Brand names: Keep in English unless culturally inappropriate
+2. Include visible text in the image using this format: text in quotation marks
+   - Brand name: ALWAYS in English (NEVER translate), appears as: the BRANDNAME brand
+   - Campaign message: Translated to local language, appears as: localized message text
+   - Example for Germany: the banner shows Nike (English brand name) with text "Laufe Weiter" (German slogan)
 3. Include ALL products mentioned - show actual products in the scene naturally
-4. If no brand name provided, generate one that fits products and target market
+4. If no brand name provided, generate one in English that fits the products
 5. Describe brand logo placement prominently (typically top-left or top-right corner)
-6. State this is for "advertising banner for [TARGET MARKET] market"
+6. State this is for an advertising banner for [TARGET MARKET] market
 7. Adapt visual style, colors, composition to match target market cultural preferences
 8. Be specific about lighting, colors, composition, and atmosphere
 9. Create a cohesive, professional advertising scene that resonates with the local culture
+10. IMPORTANT: Keep the entire image description as one continuous paragraph in the image_prompt field
 
-Generate the following fields:
+Generate the following fields in JSON format:
 - image_prompt: The complete visual description
 - translated_campaign_message: The campaign message in the target market language (exactly as it appears in your image_prompt)
 - brand_mentions: Count of times the brand name appears in quotes
 - includes_logo: true if you mention logo placement
-- includes_campaign_message: true if you include the campaign message text"""
+- includes_campaign_message: true if you include the campaign message text
+
+Return your response as a JSON object."""
 
     # Build user prompt with campaign details
     products = campaign.get("products", [])
@@ -122,15 +132,15 @@ Generate the following fields:
 
     # Build brand-specific instructions
     if brand_name:
-        brand_instruction = f"""Brand Name: "{brand_name}"
-- The brand name "{brand_name}" MUST appear in double quotes multiple times in your prompt
-- Include the "{brand_name}" logo prominently visible in the image (typically top-left or top-right corner)
-- Ensure strong brand presence throughout the scene"""
+        brand_instruction = f"""Brand Name: {brand_name}
+- The brand name {brand_name} must be visible as text in the image
+- Include the {brand_name} logo prominently in top-left or top-right corner
+- Describe the brand name appearing in the scene"""
     else:
         brand_instruction = """Brand Name: Not specified
 - Generate an appropriate brand name for these products and target market
-- The generated brand name MUST appear in double quotes multiple times in your prompt
-- Include the logo with this brand name prominently visible in the image (typically top-left or top-right corner)"""
+- The brand name must be visible as text in the image
+- Include the logo prominently in top-left or top-right corner"""
 
     # Add assets context if available
     assets_section = ""
@@ -160,65 +170,65 @@ The input reference images should guide the creative direction while ensuring al
 Products: {', '.join(products_list)}
 Target Market: {target_market}
 Target Audience: {target_audience}
-Campaign Message (ORIGINAL ENGLISH): "{campaign_message}"
+Campaign Message: {campaign_message}
 {brand_instruction}{assets_section}{reference_image_section}
 
-Create a detailed Seedream 4.0 optimized prompt for a professional advertising banner that showcases ALL products together.
+Create a detailed image generation prompt for a professional advertising banner.
 
-CRITICAL LOCALIZATION REQUIREMENTS FOR {target_market.upper()} MARKET:
-1. Campaign Message Translation:
-   - If {target_market} is US, UK, Australia, or Canada: Use the English message "{campaign_message}" AS-IS (do NOT translate)
-   - For other markets: TRANSLATE "{campaign_message}" to the primary language of {target_market}
-2. Adapt visual style, colors, and composition to {target_market} cultural preferences
-3. Consider {target_market} cultural symbolism, color meanings, and aesthetic values
-4. The campaign message MUST appear in the image in double quotes
+REQUIREMENTS:
+1. Write one continuous paragraph describing the scene
+2. Show all products ({', '.join(products_list)}) together in a natural setting
+3. Brand name: ALWAYS keep "{brand_name if brand_name else '(generate one)'}" in ENGLISH - describe it appearing as visible text in the image
+4. Campaign message: Translate "{campaign_message}" to local language - describe it appearing as visible text in the image
+5. Include brand logo placement (top-left or top-right corner)
+6. Specify this is an advertising banner for {target_market} market
+7. Include lighting, colors, composition details for {target_market} aesthetic
 
-SEEDREAM 4.0 PROMPT REQUIREMENTS:
-1. Use natural, coherent language: describe subject + action + environment
-2. Put ALL text in double quotes:
-   - Brand name as "{brand_name if brand_name else '<Generated Brand>'}"
-   - Campaign message: Use English AS-IS for US/UK/Australia/Canada, TRANSLATE to local language for other markets
-3. Show all actual products in the scene: {', '.join(products_list)}
-4. Specify this is for an "advertising banner for {target_market} market"
-5. Include specific details about lighting, colors, composition, and atmosphere reflecting {target_market} aesthetic
-6. Describe brand logo placement clearly (e.g., "top-right corner with clear visibility")
-7. Use professional advertising photography aesthetics appropriate for {target_market}
-8. Create a cohesive scene that naturally features all products together
+CRITICAL LOCALIZATION RULES FOR {target_market}:
+- BRAND NAME: Keep "{brand_name if brand_name else '(generate one)'}" in English (DO NOT TRANSLATE)
+- CAMPAIGN MESSAGE: {"Keep in English" if target_market in ['US', 'UK', 'Australia', 'Canada'] else f"TRANSLATE to {target_market} language"}
 
-IMPORTANT:
-- For English-speaking markets (US, UK, Australia, Canada): Use "{campaign_message}" exactly as provided
-- For other markets: Translate "{campaign_message}" to the target market's primary language
+Example for Germany: Brand "Nike" (English) with slogan "Laufe Weiter" (German translation of "Run Further")
 
-Target the visual style and cultural preferences for {target_market} market and {target_audience} audience."""
+The image_prompt field should be one complete paragraph with the brand name in English and campaign message in the local language."""
 
     logger.info("Optimizing prompt with GPT-4 (structured output)...")
 
-    # Generate optimized prompt using GPT-4 with JSON mode (streaming approach)
-    # Note: Replicate's OpenAI models return lists, so we use streaming directly
-    full_response = ""
-    for event in replicate.stream(
-        "openai/gpt-4.1-nano",
-        input={
-            "prompt": user_prompt,
-            "system_prompt": system_prompt,
-            "temperature": 0.7,
-            "max_completion_tokens": 600,
-            "top_p": 1,
-            "presence_penalty": 0,
-            "frequency_penalty": 0,
-            "response_format": {"type": "json_object"}
-        },
-    ):
-        full_response += str(event)
+    # Generate optimized prompt using GPT-4o-mini with JSON mode (gpt-4.1-nano struggles with quoted text in JSON)
+    response = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.7,
+        max_tokens=600,
+        top_p=1,
+        presence_penalty=0,
+        frequency_penalty=0,
+        response_format={"type": "json_object"}
+    )
 
-    full_response = full_response.strip()
+    full_response = response.choices[0].message.content.strip()
 
     # Try to parse as JSON
     try:
+        # Debug: Log first 800 chars of response to see any issues
+        logger.debug(f"Raw response (first 800 chars): {full_response[:800]}")
+
         # Clean up common JSON formatting issues
         cleaned_response = full_response
+
         # Fix trailing quotes in strings (e.g., "text"" -> "text")
         cleaned_response = re.sub(r'""([,\}])', r'"\1', cleaned_response)
+
+        # Remove any tab characters that might have been incorrectly inserted
+        cleaned_response = cleaned_response.replace('\t', ' ')
+
+        # Try to extract just the JSON object if there's extra text
+        json_match = re.search(r'\{.*\}', cleaned_response, re.DOTALL)
+        if json_match:
+            cleaned_response = json_match.group(0)
 
         result = json.loads(cleaned_response)
 
@@ -251,39 +261,41 @@ def generate_brand_name(products: list, target_market: str, target_audience: str
     """
     products_list = [str(p) for p in products]
 
-    system_prompt = """You are an expert brand strategist. Generate a compelling, memorable brand name that fits the products and target market."""
+    system_prompt = """You are an expert brand strategist. Generate compelling, memorable brand names in ENGLISH ONLY for global brands."""
 
-    user_prompt = f"""Generate a brand name for the following products:
+    user_prompt = f"""Generate an English brand name for the following products:
 Products: {', '.join(products_list)}
 Target Market: {target_market}
 Target Audience: {target_audience}
 
 Generate a single, compelling brand name (2-3 words maximum) that:
 - Is memorable and brandable
-- Fits the products and target market
+- MUST be in ENGLISH (use Latin alphabet only)
+- Fits the products and target market culturally
 - Is appropriate for the target audience
-- Works well in the {target_market} market
+- Works well globally and in the {target_market} market
 
-Return ONLY the brand name, nothing else."""
+CRITICAL: The brand name MUST be in English, even if the target market is {target_market}.
+International brands use English names for global recognition.
+
+Return ONLY the English brand name, nothing else."""
 
     logger.info("Generating brand name with LLM...")
 
-    full_response = ""
-    for event in replicate.stream(
-        "openai/gpt-4.1-nano",
-        input={
-            "prompt": user_prompt,
-            "system_prompt": system_prompt,
-            "temperature": 0.8,
-            "max_completion_tokens": 50,
-            "top_p": 1,
-            "presence_penalty": 0,
-            "frequency_penalty": 0,
-        },
-    ):
-        full_response += str(event)
+    response = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.8,
+        max_tokens=50,
+        top_p=1,
+        presence_penalty=0,
+        frequency_penalty=0
+    )
 
-    brand_name = full_response.strip().strip('"').strip("'").strip()
+    brand_name = response.choices[0].message.content.strip().strip('"').strip("'").strip()
     logger.info(f"Generated brand name: {brand_name}")
     return brand_name
 
@@ -323,22 +335,20 @@ Return ONLY the campaign message, nothing else."""
 
     logger.info("Generating campaign message with LLM...")
 
-    full_response = ""
-    for event in replicate.stream(
-        "openai/gpt-4.1-nano",
-        input={
-            "prompt": user_prompt,
-            "system_prompt": system_prompt,
-            "temperature": 0.8,
-            "max_completion_tokens": 50,
-            "top_p": 1,
-            "presence_penalty": 0,
-            "frequency_penalty": 0,
-        },
-    ):
-        full_response += str(event)
+    response = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.8,
+        max_tokens=50,
+        top_p=1,
+        presence_penalty=0,
+        frequency_penalty=0
+    )
 
-    campaign_message = full_response.strip().strip('"').strip("'").strip()
+    campaign_message = response.choices[0].message.content.strip().strip('"').strip("'").strip()
     logger.info(f"Generated campaign message: {campaign_message}")
     return campaign_message
 

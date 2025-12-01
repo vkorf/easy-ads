@@ -22,9 +22,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
-from pipeline.generator import ReplicateGenerator
+from pipeline.generator import AtlasCloudGenerator
 from pipeline.assets_loader import AssetsLoader
-import replicate
 
 # Import compliance checker
 from pipeline.compliance import check_brand_compliance
@@ -114,9 +113,9 @@ def generate_banners_task(job_id: str, campaign: dict):
         brand_name = (campaign.get("brand_name") or "").strip()
         
         # Get API token
-        api_token = os.getenv("REPLICATE_API_TOKEN")
+        api_token = os.getenv("ATLASCLOUD_API_KEY")
         if not api_token:
-            raise ValueError("REPLICATE_API_TOKEN not found in environment")
+            raise ValueError("ATLASCLOUD_API_KEY not found in environment")
         
         # Generate brand_name if blank
         if not brand_name:
@@ -165,11 +164,11 @@ def generate_banners_task(job_id: str, campaign: dict):
 
         # Initialize generator
         generation_jobs[job_id]["progress"] = {"step": "Initializing generator", "progress": 50}
-        generator = ReplicateGenerator(api_token)
+        generator = AtlasCloudGenerator(api_token)
         
         # Generate images for each aspect ratio
         aspect_ratios = ["1:1", "9:16", "16:9"]
-        #aspect_ratios = ["1:1"]
+        aspect_ratios = ["1:1"]
 
         generated_images = []
         generation_errors = []
@@ -312,10 +311,10 @@ async def check_compliance(request: ComplianceCheckRequest):
                 raise HTTPException(status_code=404, detail=f"Image not found: {rel_path}")
             absolute_paths.append(str(abs_path))
 
-        # Check API token
-        api_token = os.getenv("REPLICATE_API_TOKEN")
+        # Check API token (compliance still uses OpenAI, not AtlasCloud)
+        api_token = os.getenv("OPENAI_API_TOKEN")
         if not api_token:
-            raise HTTPException(status_code=500, detail="REPLICATE_API_TOKEN not configured")
+            raise HTTPException(status_code=500, detail="OPENAI_API_TOKEN not configured")
 
         # Run compliance check
         logger.info(f"Running compliance check for brand: {request.brand_name}")
