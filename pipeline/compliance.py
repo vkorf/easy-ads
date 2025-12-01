@@ -9,8 +9,9 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 import os
-import replicate
+from openai import OpenAI
 from typing import List, Dict, Optional
+import base64
 
 # Load environment variables from .env file in project root
 env_path = Path(__file__).parent.parent / '.env'
@@ -23,6 +24,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Initialize OpenAI client
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_TOKEN"))
+
 
 def check_brand_compliance(
     image_paths: List[str],
@@ -30,7 +34,7 @@ def check_brand_compliance(
     campaign_message: Optional[str] = None
 ) -> Dict:
     """
-    Check if generated images contain brand logo and name using GPT-4.1-nano vision
+    Check if generated images contain brand logo and name using GPT-4o-mini vision
     
     Args:
         image_paths: List of paths to generated images (best two images)
@@ -55,14 +59,16 @@ def check_brand_compliance(
     logger.info(f"Analyzing {len(image_paths)} image(s)...")
     
     # Prepare system prompt
-    system_prompt = """You are an expert brand compliance checker for advertising banners. 
+    system_prompt = """You are an expert brand compliance checker for advertising banners.
 Your task is to analyze images and verify brand compliance by:
 1. Detecting ALL text visible in the image (using OCR/vision capabilities)
 2. Checking if the brand name appears in the detected text
 3. Identifying if a brand logo is visible in the image
 4. Verifying the overall brand presence and compliance
 
-Be thorough and accurate in your analysis. Report all text you can see, even if partially visible."""
+Be thorough and accurate in your analysis. Report all text you can see, even if partially visible.
+
+You must respond in JSON format with your analysis."""
 
     # Build user prompt
     brand_check_instruction = f"""Brand Name to Check: "{brand_name}"
@@ -94,39 +100,48 @@ Return your analysis in the following JSON format:
 
 Additionally, check if the campaign message "{campaign_message}" appears in the detected text."""
 
-    logger.info("Sending images to GPT-4.1-nano for analysis...")
-    
-    # Open image files for input
-    image_files = []
+    logger.info("Sending images to GPT-4o-mini for analysis...")
+
+    # Prepare image content for OpenAI Vision API
     try:
+        # Build messages with images
+        image_contents = []
         for img_path in image_paths:
-            img_file = open(img_path, "rb")
-            image_files.append(img_file)
-        
-        # Prepare image_input list
-        image_input = [img_file for img_file in image_files]
-        
-        # Stream response from GPT-4.1-nano
-        full_response = ""
-        for event in replicate.stream(
-            "openai/gpt-4.1-nano",
-            input={
-                "top_p": 1,
-                "prompt": brand_check_instruction,
-                "messages": [],
-                "image_input": image_input,
-                "temperature": 0.3,  # Lower temperature for more consistent analysis
-                "system_prompt": system_prompt,
-                "presence_penalty": 0,
-                "frequency_penalty": 0,
-                "max_completion_tokens": 2048,
-                "response_format": {"type": "json_object"}
-            },
-        ):
-            full_response += str(event)
-        
+            with open(img_path, "rb") as img_file:
+                base64_image = base64.b64encode(img_file.read()).decode('utf-8')
+                image_contents.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image}"
+                    }
+                })
+
+        # Create message with text and images
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": brand_check_instruction},
+                    *image_contents
+                ]
+            }
+        ]
+
+        # Call OpenAI Vision API
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.3,  # Lower temperature for more consistent analysis
+            max_tokens=2048,
+            top_p=1,
+            presence_penalty=0,
+            frequency_penalty=0,
+            response_format={"type": "json_object"}
+        )
+
         # Parse JSON response
-        full_response = full_response.strip()
+        full_response = response.choices[0].message.content.strip()
         
         # Try to extract JSON from response
         import re
@@ -156,26 +171,19 @@ Additionally, check if the campaign message "{campaign_message}" appears in the 
             }
         
         return result
-        
+
     except Exception as e:
         logger.error(f"Error during brand compliance check: {str(e)}")
         raise
-    finally:
-        # Close all image files
-        for img_file in image_files:
-            try:
-                img_file.close()
-            except Exception:
-                pass
 
 
 def main():
     """Main function to run brand compliance check"""
-    
+
     # Check for API token
-    api_token = os.getenv("REPLICATE_API_TOKEN")
+    api_token = os.getenv("OPENAI_API_TOKEN")
     if not api_token:
-        logger.error("REPLICATE_API_TOKEN not found in .env file")
+        logger.error("OPENAI_API_TOKEN not found in .env file")
         sys.exit(1)
     
     # Example usage - can be modified to accept command line arguments
