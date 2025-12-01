@@ -15,7 +15,8 @@ from pipeline.assets_loader import AssetsLoader
 from pipeline.reporter import PipelineReporter
 from pipeline.campaign_utils import (
     generate_optimized_prompt,
-    validate_campaign
+    validate_campaign,
+    LegalComplianceError
 )
 
 # Load environment variables
@@ -120,6 +121,7 @@ def main():
     logger.info("")
 
     # Use GPT-4 to generate optimized prompt with assets context
+    # This includes legal compliance checking for prohibited words
     reporter.start_step("Generate Optimized Prompt", {
         "model": "GPT-4",
         "has_assets": bool(assets_context)
@@ -133,6 +135,16 @@ def main():
             "prompt_length": len(prompt),
             "translated_message": translated_message
         })
+    except LegalComplianceError as e:
+        # Special handling for legal compliance errors
+        logger.error("")
+        logger.error("Campaign rejected due to legal compliance violations.")
+        logger.error(f"Prohibited words found: {', '.join(e.prohibited_words_found)}")
+        logger.error("Please revise your campaign brief and try again.")
+        logger.error("")
+        reporter.end_step("failed", error_message=str(e))
+        reporter.finalize("failed")
+        raise
     except Exception as e:
         reporter.end_step("failed", error_message=str(e))
         reporter.finalize("failed")

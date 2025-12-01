@@ -33,6 +33,7 @@ Generate professional advertising banners with multiple products using GenAI. A 
 - **High Resolution**: 2048x2048 output
 - **Multi-Format**: Support for 1:1, 9:16, and 16:9 aspect ratios
 - **Brand Intelligence**: Auto-generates brand names and campaign messages
+- **Legal Compliance**: Automated prohibited words detection in campaign content (50+ rules)
 - **Sensitive Content Filtering**: Built-in content moderation with error handling and form validation
 - **Brand Compliance Checker**: AI-powered verification that generated images contain brand logo and name
 - **Web Interface**: Modern React frontend with real-time progress tracking
@@ -402,8 +403,10 @@ easy-ads/
    - Brand compliance checking
 
 3. **Pipeline (Python)**
+   - Legal compliance validation (prohibited words)
    - Campaign prompt optimization (GPT-4)
    - Image generation (Seedream-4 via Replicate)
+   - Brand compliance verification (AI vision)
    - Asset loading and enrichment
    - Multi-format output
 

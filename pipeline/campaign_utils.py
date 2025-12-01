@@ -9,7 +9,7 @@ import logging
 import json
 import re
 import os
-from typing import Tuple
+from typing import Tuple, List, Set, Dict
 from pydantic import BaseModel, Field
 from openai import OpenAI
 
@@ -17,6 +17,133 @@ logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_TOKEN"))
+
+
+# LEGAL COMPLIANCE - Prohibited Words List
+# These words are flagged as potentially problematic in advertising content
+PROHIBITED_WORDS: Set[str] = {
+    # False/misleading claims
+    "guaranteed", "miracle", "cure", "100%", "risk-free", "free money",
+    "get rich quick", "instant wealth", "overnight success",
+
+    # Offensive/inappropriate
+    "kill", "death", "suicide", "violence", "weapon", "drug", "cocaine",
+    "heroin", "marijuana", "cannabis", "tobacco", "cigarette", "alcohol",
+    "beer", "wine", "vodka", "whiskey",
+
+    # Discriminatory terms
+    "race", "racist", "discrimination", "hate", "supremacy",
+
+    # Health claims (without approval)
+    "cure cancer", "cure diabetes", "lose weight instantly", "miracle pill",
+    "FDA approved" , "clinically proven", "doctor recommended",
+
+    # Financial scams
+    "pyramid scheme", "ponzi", "mlm", "multi-level marketing",
+    "work from home guaranteed", "easy money", "no effort required",
+
+    # Sexual/adult content
+    "porn", "pornography", "xxx", "adult content", "sex",
+
+    # Gambling (in restricted markets)
+    "casino", "betting", "gamble", "lottery", "slot machine",
+
+    # Weapons/dangerous items
+    "gun", "rifle", "firearm", "explosive", "bomb", "ammunition"
+}
+
+
+class LegalComplianceError(Exception):
+    """Raised when content contains prohibited words or violates legal guidelines"""
+
+    def __init__(self, message: str, prohibited_words_found: List[str]):
+        self.prohibited_words_found = prohibited_words_found
+        super().__init__(message)
+
+
+def check_legal_compliance(campaign: dict) -> Dict[str, any]:
+    """
+    Check campaign content for prohibited words and legal compliance issues.
+
+    This function scans all user-provided content in the campaign brief
+    (products, campaign message, brand name, target audience) for prohibited
+    words that may violate advertising standards or legal requirements.
+
+    Args:
+        campaign: Campaign brief dictionary with user input
+
+    Returns:
+        Dictionary with compliance results:
+        - is_compliant: bool
+        - prohibited_words_found: List[str] of flagged words
+        - violations: Dict mapping field names to lists of prohibited words found
+
+    Raises:
+        LegalComplianceError: If prohibited words are found in the initial campaign form
+    """
+    violations: Dict[str, List[str]] = {}
+    all_prohibited_found: Set[str] = set()
+
+    # Fields to check
+    fields_to_check = {
+        "brand_name": campaign.get("brand_name", ""),
+        "campaign_message": campaign.get("campaign_message", ""),
+        "target_audience": campaign.get("target_audience", ""),
+        "products": " ".join([str(p) for p in campaign.get("products", [])])
+    }
+
+    logger.info("Running legal compliance check on campaign content...")
+
+    for field_name, content in fields_to_check.items():
+        if not content:
+            continue
+
+        # Convert to lowercase for case-insensitive matching
+        content_lower = content.lower()
+
+        # Check for prohibited words
+        found_words = []
+        for prohibited_word in PROHIBITED_WORDS:
+            # Use word boundary matching to avoid false positives
+            # e.g., "guaranteed" won't match "guard"
+            pattern = r'\b' + re.escape(prohibited_word.lower()) + r'\b'
+            if re.search(pattern, content_lower):
+                found_words.append(prohibited_word)
+                all_prohibited_found.add(prohibited_word)
+
+        if found_words:
+            violations[field_name] = found_words
+            logger.warning(f"⚠ Legal compliance issue in '{field_name}': {', '.join(found_words)}")
+
+    # Determine compliance status
+    is_compliant = len(all_prohibited_found) == 0
+
+    result = {
+        "is_compliant": is_compliant,
+        "prohibited_words_found": sorted(list(all_prohibited_found)),
+        "violations": violations
+    }
+
+    if not is_compliant:
+        # Log detailed violation report
+        logger.error("="*60)
+        logger.error("LEGAL COMPLIANCE CHECK FAILED")
+        logger.error("="*60)
+        logger.error(f"Found {len(all_prohibited_found)} prohibited word(s) in campaign content:")
+        for field, words in violations.items():
+            logger.error(f"  {field}: {', '.join(words)}")
+        logger.error("="*60)
+
+        # Raise error to stop pipeline
+        error_msg = (
+            f"Campaign content contains prohibited words: {', '.join(sorted(all_prohibited_found))}. "
+            f"Please revise your campaign brief to remove these terms. "
+            f"Violations found in: {', '.join(violations.keys())}"
+        )
+        raise LegalComplianceError(error_msg, sorted(list(all_prohibited_found)))
+
+    logger.info("✓ Legal compliance check passed - no prohibited words found")
+    return result
 
 
 class OptimizedPrompt(BaseModel):
@@ -48,7 +175,14 @@ def generate_optimized_prompt(campaign: dict, assets_context: str = "", has_refe
 
     Returns:
         Tuple of (optimized_prompt, translated_campaign_message)
+
+    Raises:
+        LegalComplianceError: If campaign content contains prohibited words
     """
+
+    # STEP 1: Legal Compliance Check - Run BEFORE GPT processing
+    # This validates the initial user input for prohibited content
+    check_legal_compliance(campaign)
 
     # Build system prompt from the template with Seedream 4.0 best practices
     system_prompt = """You are an expert creative strategist for advertising banners optimizing prompts for Seedream 4.0 image generation with global market expertise.
